@@ -157,9 +157,3 @@ Inside the IAC Driver properties window:
     - Your controller/software is sending to `MidiToFPP`.
     - Hammerspoon is running.
     - The MIDI mapping in `init.lua` matches the messages being sent (channels, notes, CC numbers, etc.).
-
----
-
-## License
-
-Add your chosen license here (e.g. MIT, Apache 2.0) or remove this section if not applicable.
