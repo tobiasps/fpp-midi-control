@@ -119,6 +119,7 @@ Inside the IAC Driver properties window:
 3. **Trigger some MIDI notes / CC messages**:
    - Your MIDI controller or software should send data to `MidiToFPP`.
    - The Hammerspoon script should react according to how it’s written (e.g. mapping certain notes/CCs to FPP actions).
+   - NOTE: Make sure the midi software (e.g. Logic, Ableton, or other) does create a MIDI loop. In other words it should be set to _not_ use `MidiToFPP` as an input, only output.
 
 ---
 
