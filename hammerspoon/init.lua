@@ -1,61 +1,20 @@
--- print available MIDI device names to the Hammerspoon Console
-print("Devices: " .. hs.inspect(hs.midi.devices()))
-virtualSources = hs.midi.virtualSources()
-print("VirtualSources: " .. hs.inspect(virtualSources))
+-- =========================================================================
+--  FPP LIGHTING CONTROLLER (OPTIMIZED)
+-- =========================================================================
 
--- Your FPP IP
-local FPP_IP = "fpp.local"    -- change this to your Pi's IP
-local PLAYLIST_NAME = "MyShow"   -- change to your FPP playlist name
+-- 1. CONFIGURATION
+-- Use IP Address instead of ".local" for faster response (less DNS lag)
+local FPP_CONFIG = {
+    IP = "fpp.local", -- CHANGE THIS to your actual IP (e.g. 100.x.x.x)
+    VIRTUAL_PORT_NAME = "MidiToFPP",
+    CONTROLLER_NAME = "LPD8"
+}
 
--- Function to trigger FPP playlist
-function triggerFPP()
-    local url = "http://" .. FPP_IP .. "/api/command/StartPlaylist/" .. PLAYLIST_NAME
-    hs.http.doAsyncRequest(url, "GET", nil, nil, function(status, body)
-        print("FPP trigger returned status:", status)
-    end)
-end
+-- 2. COMMAND MAPPING
+-- Define what each note does. 
+-- Type "playlist" = Replaces background, loops forever.
+-- Type "effect"   = Plays ON TOP of background (transparent), does not stop music.
 
-function stopPlayback()
-    local url = "http://" .. FPP_IP .. "/api/sequence/current/stop"
-    -- Using sync call to make sure it has executed before the next command
-    local status, body, headers = hs.http.doRequest(url, "GET")
-    print("FPP stop returned status:", status)
-end
-
--- Start a FPP sequence, stop any other sequence that is playing
-function triggerFPPSeq(seq)
-    stopPlayback()
-    local url = "http://" .. FPP_IP .. "/api/sequence/" .. hs.http.encodeForQuery(seq) .. "/start"
-    hs.http.doAsyncRequest(url, "GET", nil, nil, function(status, body)
-        print("FPP trigger returned status:", status)
-    end)
-end
-
--- Listen to MIDI note-on from virtual source MidiToFPP
-local midi = hs.midi.newVirtualSource("MidiToFPP")
-if midi ~= nil then
-    midi:callback(function(object, deviceName, commandType, description, metadata)
-        if commandType ~= "noteOn" then
-            return
-        end
-        print(
-            "Received note:", metadata.note, 
-            "on channel:", metadata.channel, 
-            "with velocity:", metadata.velocity, 
-            "at time:", metadata.timestamp
-        )
-
-        if metadata.note == 60 then
-            triggerFPPSeq("blandet")
-        elseif metadata.note == 62 then
-            triggerFPPSeq("fire")
-        elseif metadata.note == 64 then
-            triggerFPPSeq("Plasma Parts")
-        end
-    end)
-end
-
--- LPD8 midi controller
 local LPD8_NOTES = {
     PAD1 = 36,
     PAD2 = 37,
@@ -67,26 +26,124 @@ local LPD8_NOTES = {
     PAD8 = 43
 }
 
--- listen for midi note-on from LPD8
-local lpd8_midi = hs.midi.new("LPD8")
-if lpd8_midi ~= nil then
-    lpd8_midi:callback(function(object, deviceName, commandType, description, metadata)
-        if commandType ~= "noteOn" then
-            return
-        end
-        print(
-            "Received note:", metadata.note, 
-            "on channel:", metadata.channel, 
-            "with velocity:", metadata.velocity, 
-            "at time:", metadata.timestamp
-        )
+local MIDI_MAP = {
+    -- Ableton / Virtual Port Triggers
+    [60] = { type = "playlist", name = "blandet" },      -- Song 1
+    [64] = { type = "playlist", name = "Plasma Parts" }, -- Song 2
+    
+    -- LPD8 / Drum Triggers
+    [LPD8_NOTES.PAD4] = { type = "sequence", name = "fire" },        -- Pad 4 (Example)
+    [LPD8_NOTES.PAD8] = { type = "effect", name = "Shockwave" },     -- Pad 8 (Example)
+    
+    -- Panic Button
+    [127] = { type = "stop_all" }
+}
 
-        if metadata.note == LPD8_NOTES.PAD8 then
-            triggerFPPSeq("Plasma Parts")
-        elseif metadata.note == LPD8_NOTES.PAD4 then
-            triggerFPPSeq("fire")
+-- =========================================================================
+--  HELPER FUNCTIONS
+-- =========================================================================
+
+-- Send Command to FPP (Fire and Forget - Non-Blocking)
+local function sendFPP(endpoint)
+    local url = "http://" .. FPP_CONFIG.IP .. endpoint
+    print("FPP Sending: " .. url)
+    
+    hs.http.asyncGet(url, nil, function(status, body, headers)
+        if status ~= 200 then
+            print("FPP Error: " .. status)
         end
     end)
 end
 
-print("Hammerspoon FPP Trigger Loaded")
+-- Action: Switch the Sequence
+local function playSequence(name)
+    stopCurrentSequence()
+    sendFPP("/api/sequence/" .. hs.http.encodeForQuery(seq) .. "/start")
+end
+
+-- Action: Stop current Sequence
+function stopCurrentSequence()
+    local url = "http://" .. FPP_CONFIG.IP .. "/api/sequence/current/stop"
+    -- Using sync call to make sure it has executed before the next command
+    print("FPP Stopping: " .. url)
+    local status, body, headers = hs.http.doRequest(url, "GET")
+    if status ~= 200 then
+        print("FPP Error: " .. status)
+    end
+end
+
+-- Action: Switch the Background Song
+local function playPlaylist(name)
+    -- NOTE: Starting a playlist automatically stops the previous one in FPP.
+    -- We do NOT need a manual stop command (which reduces lag).
+    -- Ensure you have created a "Playlist" in FPP for each song.
+    sendFPP("/api/playlist/start/" .. hs.http.encodeForQuery(name))
+end
+
+-- Action: Fire an Overlay Effect (Drum Hit)
+local function playEffect(name)
+    -- This uses the Command API to play an .eseq over the top
+    -- Argument 1: Command ("Play Effect")
+    -- Argument 2: Effect Name
+    local url = "/api/command/Play%20Effect/" .. hs.http.encodeForQuery(name)
+    sendFPP(url)
+end
+
+-- Action: Stop Everything
+local function stopAll()
+    sendFPP("/api/playlists/stop") -- Stops background
+    sendFPP("/api/command/Stop%20All%20Effects") -- Stops overlays
+end
+
+-- Central Logic Handler
+local function handleMidi(metadata)
+    -- Ignore Note-Offs (Velocity 0)
+    if metadata.velocity == 0 then return end
+    
+    local action = MIDI_MAP[metadata.note]
+    
+    if action then
+        print("Triggering: " .. (action.name or "Stop"))
+        
+        if action.type == "playlist" then
+            playPlaylist(action.name)
+        elseif action.type == "effect" then
+            playEffect(action.name)
+        elseif action.type == "sequence" then
+            playSequence(action.name)
+        elseif action.type == "stop_all" then
+            stopAll()
+        end
+    else
+        print("Unmapped Note: " .. metadata.note)
+    end
+end
+
+-- =========================================================================
+--  MIDI LISTENERS
+-- =========================================================================
+
+-- print available MIDI device names to the Hammerspoon Console
+print("Devices: " .. hs.inspect(hs.midi.devices()))
+print("VirtualSources: " .. hs.inspect(hs.midi.virtualSources()))
+
+-- 1. Virtual Source (From Ableton)
+local virtualMidi = hs.midi.newVirtualSource(FPP_CONFIG.VIRTUAL_PORT_NAME)
+if virtualMidi then
+    virtualMidi:callback(function(_, _, commandType, _, metadata)
+        if commandType == "noteOn" then handleMidi(metadata) end
+    end)
+end
+
+-- 2. Physical Controller (LPD8)
+local lpd8Midi = hs.midi.new(FPP_CONFIG.CONTROLLER_NAME)
+if lpd8Midi then
+    print("Connected to LPD8")
+    lpd8Midi:callback(function(_, _, commandType, _, metadata)
+        if commandType == "noteOn" then handleMidi(metadata) end
+    end)
+else
+    print("Warning: LPD8 not found")
+end
+
+print("Hammerspoon FPP Controller: ONLINE")
