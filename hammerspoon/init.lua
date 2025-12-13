@@ -77,7 +77,16 @@ local function playPlaylist(name)
     -- NOTE: Starting a playlist automatically stops the previous one in FPP.
     -- We do NOT need a manual stop command (which reduces lag).
     -- Ensure you have created a "Playlist" in FPP for each song.
-    sendFPP("/api/playlist/start/" .. hs.http.encodeForQuery(name))
+
+    local Loop = 'true'
+    local IfNotRunning = 'false'
+
+    sendFPP("/api/command" .. 
+            "/" .. hs.http.encodeForQuery("Start Playlist") ..
+            "/" .. hs.http.encodeForQuery(name) ..
+            "/" .. Loop ..
+            "/" .. IfNotRunning
+        )
 end
 
 -- Action: Fire an Overlay Effect (Drum Hit)
