@@ -6,7 +6,7 @@
 -- Use IP Address instead of ".local" for faster response (less DNS lag)
 local FPP_CONFIG = {
     IP = "fpp.local", -- CHANGE THIS to your actual IP (e.g. 100.x.x.x)
-    VIRTUAL_PORT_NAME = "MidiToFPP",
+    VIRTUAL_PORT_NAME = "MidiToFpp",
     CONTROLLER_NAME = "LPD8"
 }
 
@@ -28,12 +28,12 @@ local LPD8_NOTES = {
 
 local MIDI_MAP = {
     -- Ableton / Virtual Port Triggers
-    [60] = { type = "playlist", name = "blandet" },      -- Song 1
-    [64] = { type = "playlist", name = "Plasma Parts" }, -- Song 2
+    [48] = { type = "playlist", name = "gulvet" }, -- Song 2
+    [60] = { type = "effect", name = "shock4" },      -- Song 1
     
     -- LPD8 / Drum Triggers
     [LPD8_NOTES.PAD4] = { type = "sequence", name = "fire" },        -- Pad 4 (Example)
-    [LPD8_NOTES.PAD8] = { type = "effect", name = "Shockwave" },     -- Pad 8 (Example)
+    [LPD8_NOTES.PAD8] = { type = "sequence-effect", name = "Shockwave" },     -- Pad 8 (Example)
     
     -- Panic Button
     [127] = { type = "stop_all" }
@@ -85,7 +85,31 @@ local function playEffect(name)
     -- This uses the Command API to play an .eseq over the top
     -- Argument 1: Command ("Play Effect")
     -- Argument 2: Effect Name
-    local url = "/api/command/Play%20Effect/" .. hs.http.encodeForQuery(name)
+    local StartChannel = 0
+    local Loop = 'false'
+    local Background = 'false'
+    local IfNotRunning = 'false'
+    -- TODO: Add support for parameters
+    local url = "/api/command/" .. hs.http.encodeForQuery("Effect Start") .. 
+                "/" .. hs.http.encodeForQuery(name) .. 
+                "/" .. StartChannel .. 
+                "/" .. Loop .. 
+                "/" .. Background .. 
+                "/" .. IfNotRunning
+    sendFPP(url)
+end
+
+-- Action: Fire an Overlay Effect (Drum Hit)
+local function playSequenceAsEffect(name)
+    -- This uses the Command API to play an .eseq over the top
+    -- Argument 1: Command ("Play Effect")
+    -- Argument 2: Effect Name
+    local Loop = 'false'
+    local Background = 'false'
+    -- TODO: Add support for parameters
+    local url = "/api/command/" .. hs.http.encodeForQuery("Effect Start") .. 
+                "/" .. Loop .. 
+                "/" .. Background
     sendFPP(url)
 end
 
@@ -111,6 +135,8 @@ local function handleMidi(metadata)
             playEffect(action.name)
         elseif action.type == "sequence" then
             playSequence(action.name)
+        elseif action.type == "sequence-effect" then
+            playSequenceAsEffect(action.name)
         elseif action.type == "stop_all" then
             stopAll()
         end
@@ -133,6 +159,8 @@ if virtualMidi then
     virtualMidi:callback(function(_, _, commandType, _, metadata)
         if commandType == "noteOn" then handleMidi(metadata) end
     end)
+else
+    print("Warning: Virtual MIDI " .. FPP_CONFIG.VIRTUAL_PORT_NAME .. " not found")
 end
 
 -- 2. Physical Controller (LPD8)
