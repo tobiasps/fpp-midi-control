@@ -32,8 +32,10 @@ local MIDI_MAP = {
     [60] = { type = "effect", name = "shock4" },      -- Song 1
     
     -- LPD8 / Drum Triggers
-    [LPD8_NOTES.PAD4] = { type = "sequence", name = "fire" },        -- Pad 4 (Example)
-    [LPD8_NOTES.PAD8] = { type = "sequence-effect", name = "Shockwave" },     -- Pad 8 (Example)
+    [LPD8_NOTES.PAD6] = { type = "playlist", name = "hvid" },
+    [LPD8_NOTES.PAD3] = { type = "playlist", name = "red" },
+    [LPD8_NOTES.PAD2] = { type = "stop_all" },
+    [LPD8_NOTES.PAD7] = { type = "sequence", name = "shockwave" },
     
     -- Panic Button
     [127] = { type = "stop_all" }
@@ -57,8 +59,12 @@ end
 
 -- Action: Switch the Sequence
 local function playSequence(name)
+    if name == nil then
+        print("playSequence: name is nil, do nothing")
+        return
+    end
     stopCurrentSequence()
-    sendFPP("/api/sequence/" .. hs.http.encodeForQuery(seq) .. "/start")
+    sendFPP("/api/sequence/" .. hs.http.encodeForQuery(name) .. "/start")
 end
 
 -- Action: Stop current Sequence
@@ -78,7 +84,12 @@ local function playPlaylist(name)
     -- We do NOT need a manual stop command (which reduces lag).
     -- Ensure you have created a "Playlist" in FPP for each song.
 
-    local Loop = 'true'
+    if name == nil then
+        print("playPlaylist: name is nil, do nothing")
+        return
+    end
+
+    local Loop = 'false'
     local IfNotRunning = 'false'
 
     sendFPP("/api/command" .. 
@@ -94,6 +105,12 @@ local function playEffect(name)
     -- This uses the Command API to play an .eseq over the top
     -- Argument 1: Command ("Play Effect")
     -- Argument 2: Effect Name
+
+    if name == nil then
+        print("playEffect: name is nil, do nothing")
+        return
+    end
+
     local StartChannel = 0
     local Loop = 'false'
     local Background = 'false'
@@ -113,10 +130,16 @@ local function playSequenceAsEffect(name)
     -- This uses the Command API to play an .eseq over the top
     -- Argument 1: Command ("Play Effect")
     -- Argument 2: Effect Name
+    if name == nil then
+        print("playSequenceAsEffect: name is nil, do nothing")
+        return
+    end
+
     local Loop = 'false'
     local Background = 'false'
     -- TODO: Add support for parameters
     local url = "/api/command/" .. hs.http.encodeForQuery("Effect Start") .. 
+                "/" .. hs.http.encodeForQuery(name) ..
                 "/" .. Loop .. 
                 "/" .. Background
     sendFPP(url)
@@ -124,8 +147,9 @@ end
 
 -- Action: Stop Everything
 local function stopAll()
+    stopCurrentSequence()
     sendFPP("/api/playlists/stop") -- Stops background
-    sendFPP("/api/command/Stop%20All%20Effects") -- Stops overlays
+    --sendFPP("/api/command/Stop%20All%20Effects") -- Stops overlays
 end
 
 -- Central Logic Handler
